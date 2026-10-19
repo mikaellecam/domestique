@@ -93,7 +93,9 @@ fn login() -> Result<()> {
         mywhoosh::Session::login(&email, &password)?; // fail on a typo now, not in cron
         (cfg.mywhoosh_email, cfg.mywhoosh_password) = (email, password);
     }
-    cfg.garmin = Some(garmin::browser_login()?);
+    cfg.garmin = Some(garmin::browser_login(|url| {
+        println!("Sign in to Garmin Connect in your browser. If it did not open, visit:\n{url}")
+    })?);
     config::save(&cfg)?;
     println!("Saved to {}", config::path().display());
     Ok(())

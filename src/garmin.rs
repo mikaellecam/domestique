@@ -41,7 +41,8 @@ pub struct Tokens {
 
 /// Signs in on Garmin's own page, so this program never sees the password or
 /// the MFA code. Garmin redirects the browser to a local port with a ticket.
-pub fn browser_login() -> Result<Tokens> {
+/// `show_url` gets the page's address, for when no browser opens.
+pub fn browser_login(show_url: impl FnOnce(&str)) -> Result<Tokens> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let callback = format!("http://{}/", listener.local_addr()?);
     let query: Vec<String> = [
@@ -55,7 +56,7 @@ pub fn browser_login() -> Result<Tokens> {
     .map(|(k, v)| format!("{k}={}", percent_encode(v)))
     .collect();
     let url = format!("{SIGNIN_URL}?{}", query.join("&"));
-    println!("Sign in to Garmin Connect in your browser. If it did not open, visit:\n{url}");
+    show_url(&url);
     open_browser(&url);
 
     let ticket = wait_for_ticket(&listener)?;
