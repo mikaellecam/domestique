@@ -14,9 +14,12 @@ use std::io::Cursor;
 
 /// Device names as the FIT profile spells them, e.g. `edge_explore2`.
 pub fn product_names() -> impl Iterator<Item = String> {
-    (0..=u16::MAX)
-        .map(|v| GarminProduct(v).to_string())
-        .filter(|s| !s.starts_with("GarminProduct("))
+    (0..=u16::MAX).filter_map(product_name)
+}
+
+/// None for ids the FIT profile doesn't name.
+pub fn product_name(id: u16) -> Option<String> {
+    Some(GarminProduct(id).to_string()).filter(|s| !s.starts_with("GarminProduct("))
 }
 
 pub fn product_id(name: &str) -> Option<u16> {
