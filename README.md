@@ -42,11 +42,11 @@ metrics (most Edge, Forerunner and Fenix models do).
 `whoosh2garmin rewrite in.fit out.fit --device edge_explore2` rewrites one file without
 uploading it.
 
-Credentials are stored in plain text, readable only by you, in:
+Credentials and settings are stored in plain text, readable only by you, in:
 
-- Linux: `~/.config/whoosh2garmin/credentials.json`
-- macOS: `~/Library/Application Support/whoosh2garmin/credentials.json`
-- Windows: `%APPDATA%\whoosh2garmin\credentials.json`
+- Linux: `~/.config/whoosh2garmin/config.json`
+- macOS: `~/Library/Application Support/whoosh2garmin/config.json`
+- Windows: `%APPDATA%\whoosh2garmin\config.json`
 
 ## Run it on a schedule
 

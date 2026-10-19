@@ -10,7 +10,8 @@ use std::net::TcpListener;
 
 const SIGNIN_URL: &str = "https://sso.garmin.com/sso/signin";
 const TOKEN_URL: &str = "https://diauth.garmin.com/di-oauth2-service/oauth/token";
-const TICKET_GRANT: &str = "https://connectapi.garmin.com/di-oauth2-service/oauth/grant/service_ticket";
+const TICKET_GRANT: &str =
+    "https://connectapi.garmin.com/di-oauth2-service/oauth/grant/service_ticket";
 /// Public client id of the Garmin Connect Android app.
 const CLIENT_ID: &str = "GARMIN_CONNECT_MOBILE_ANDROID_DI_2025Q2";
 const API: &str = "https://connectapi.garmin.com";
@@ -28,7 +29,7 @@ const APP_HEADERS: [(&str, &str); 7] = [
     ("X-GCExperience", "GC5"),
 ];
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Tokens {
     pub access_token: String,
     refresh_token: String,
@@ -91,7 +92,9 @@ pub fn activities_since(token: &str, since: i64) -> Result<Vec<(i64, i64)>> {
     let mut out = Vec::new();
     for start in (0..).step_by(100) {
         let page: Vec<Value> = api(
-            ureq::get(format!("{API}/activitylist-service/activities/search/activities")),
+            ureq::get(format!(
+                "{API}/activitylist-service/activities/search/activities"
+            )),
             token,
         )
         .query("start", start.to_string())
@@ -101,7 +104,10 @@ pub fn activities_since(token: &str, since: i64) -> Result<Vec<(i64, i64)>> {
         .into_body()
         .read_json()?;
         for a in &page {
-            let s = a["startTimeGMT"].as_str().and_then(parse_utc).ok_or("Garmin activity without startTimeGMT")?;
+            let s = a["startTimeGMT"]
+                .as_str()
+                .and_then(parse_utc)
+                .ok_or("Garmin activity without startTimeGMT")?;
             if s < since {
                 return Ok(out);
             }
@@ -126,7 +132,10 @@ pub fn upload(token: &str, name: &str, fit: &[u8]) -> Result<bool> {
     body.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
 
     let resp = api(ureq::post(format!("{API}/upload-service/upload")), token)
-        .header("Content-Type", format!("multipart/form-data; boundary={BOUNDARY}"))
+        .header(
+            "Content-Type",
+            format!("multipart/form-data; boundary={BOUNDARY}"),
+        )
         .send(&body[..]);
     let r: Value = match resp {
         Ok(r) => r.into_body().read_json().unwrap_or_default(),
@@ -156,12 +165,18 @@ fn request_tokens(client_id: &str, form: &[(&str, &str)]) -> Result<Tokens> {
         expires_in: i64,
     }
     let mut req = ureq::post(TOKEN_URL)
-        .header("Authorization", format!("Basic {}", base64(&format!("{client_id}:"))))
+        .header(
+            "Authorization",
+            format!("Basic {}", base64(&format!("{client_id}:"))),
+        )
         .header("Accept", "application/json");
     for (k, v) in APP_HEADERS {
         req = req.header(k, v);
     }
-    let r: Response = req.send_form(form.iter().copied())?.into_body().read_json()?;
+    let r: Response = req
+        .send_form(form.iter().copied())?
+        .into_body()
+        .read_json()?;
     Ok(Tokens {
         access_token: r.access_token,
         refresh_token: r.refresh_token,
@@ -210,7 +225,9 @@ fn open_browser(url: &str) {
 fn percent_encode(s: &str) -> String {
     s.bytes()
         .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => (b as char).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                (b as char).to_string()
+            }
             _ => format!("%{b:02X}"),
         })
         .collect()
@@ -221,7 +238,10 @@ fn base64(s: &str) -> String {
     s.as_bytes()
         .chunks(3)
         .flat_map(|c| {
-            let n = c.iter().enumerate().fold(0u32, |n, (i, &b)| n | (b as u32) << (16 - 8 * i));
+            let n = c
+                .iter()
+                .enumerate()
+                .fold(0u32, |n, (i, &b)| n | (b as u32) << (16 - 8 * i));
             (0..4).map(move |i| match i <= c.len() {
                 true => T[(n >> (18 - 6 * i) & 63) as usize] as char,
                 false => '=',
@@ -237,6 +257,9 @@ mod tests {
         // python3 -c 'import base64; print(base64.b64encode(b"..."))'
         assert_eq!(super::base64("ab"), "YWI=");
         assert_eq!(super::base64("abc:"), "YWJjOg==");
-        assert_eq!(super::base64(&format!("{}:", super::CLIENT_ID)), "R0FSTUlOX0NPTk5FQ1RfTU9CSUxFX0FORFJPSURfRElfMjAyNVEyOg==");
+        assert_eq!(
+            super::base64(&format!("{}:", super::CLIENT_ID)),
+            "R0FSTUlOX0NPTk5FQ1RfTU9CSUxFX0FORFJPSURfRElfMjAyNVEyOg=="
+        );
     }
 }

@@ -2,6 +2,7 @@
 name = "whoosh2garmin"
 version = "0.1.0"
 edition = "2024"
+default-run = "whoosh2garmin"
 
 [dependencies]
 embedded-io-adapters = { version = "0.7", features = ["std"] }
