@@ -146,15 +146,24 @@ fn review_ticks_the_rides_missing_from_garmin() {
 #[test]
 fn rides_page_shows_each_status() {
     let reason = "Garmin upload: http status: 500";
-    let mut app = App::new(configured(), true);
-    app.set_rides(vec![
+    env();
+    sync::save_status(&[
         ride(3, "Tempus Fugit", Status::OnGarmin),
         ride(2, "Downtown Dolomites", Status::Uploaded),
         ride(1, "Alula Loop", Status::Failed(reason.to_owned())),
         ride(0, "Champs-Élysées", Status::Waiting),
-    ]);
-    let mut h = harness(app);
+    ])
+    .unwrap();
+    // The last check an hour after the last ride, so the snapshot doesn't change.
+    let checked = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_792_179_923);
+    let status = fs::File::options()
+        .write(true)
+        .open(config::dir().join("status.json"));
+    status.unwrap().set_modified(checked).unwrap();
+
+    let mut h = harness(App::new(configured(), true));
     h.run();
+    h.get_by_label("Last check Fri 16 Oct, 19:45");
     for label in ["Upload", "Retry", reason, "Uploaded", "Already on Garmin"] {
         h.get_by_label(label);
     }
@@ -172,6 +181,10 @@ fn settings_page() {
     h.set_size(egui::vec2(560.0, 860.0)); // the whole page, which scrolls in the window
     h.run();
     h.get_by_label("Signed in as rider@example.com");
+    assert!(
+        disabled(&h, "Remove"),
+        "the account is the only source of rides"
+    );
     assert!(disabled(&h, "Sync after each ride"));
     h.snapshot("settings");
 }

@@ -26,7 +26,10 @@ impl App {
                     self.email = self.cfg.mywhoosh_email.clone();
                     self.password.clear();
                 }
-                if ui.add_enabled(!busy, egui::Button::new("Remove")).clicked() {
+                if ui
+                    .add_enabled(!busy && self.local, egui::Button::new("Remove"))
+                    .clicked()
+                {
                     self.cfg.mywhoosh_email.clear();
                     self.cfg.mywhoosh_password.clear();
                     self.email.clear();
@@ -34,6 +37,11 @@ impl App {
                     self.save();
                 }
             });
+            if !self.local {
+                ui.weak(
+                    "MyWhoosh isn't installed on this computer, so rides come from this account.",
+                );
+            }
         }
 
         section(ui, "Garmin Connect");
