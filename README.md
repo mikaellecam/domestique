@@ -55,4 +55,5 @@ Credentials and settings are stored in plain text, readable only by you, in:
 - Windows, every hour:
   `schtasks /create /sc hourly /tn whoosh2garmin /tr "%USERPROFILE%\.cargo\bin\whoosh2garmin.exe sync --device edge_explore2"`
 
-If Garmin ends the session, `sync` fails with a message asking you to run `login` again.
+If Garmin ends the session, `sync` fails with a message asking you to sign in to Garmin again:
+run `login` again.

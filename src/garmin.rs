@@ -80,7 +80,7 @@ pub fn refresh(old: &Tokens) -> Result<Tokens> {
             ("refresh_token", &old.refresh_token),
         ],
     )
-    .map_err(|e| format!("Garmin session expired, run `whoosh2garmin login` again ({e})"))?;
+    .map_err(|e| format!("Garmin session expired: sign in to Garmin again ({e})"))?;
     // Garmin omits the refresh token when it does not rotate it.
     if t.refresh_token.is_empty() {
         t.refresh_token = old.refresh_token.clone();
