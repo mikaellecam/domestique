@@ -17,7 +17,7 @@ fn harness(app: App) -> Harness<'static, App> {
 fn env() {
     static ENV: Once = Once::new();
     ENV.call_once(|| {
-        let dir = std::env::temp_dir().join("whoosh2garmin-ui-tests");
+        let dir = std::env::temp_dir().join("domestique-ui-tests");
         let _ = fs::remove_dir_all(&dir);
         // SAFETY: every test passes here before anything reads the environment.
         unsafe {

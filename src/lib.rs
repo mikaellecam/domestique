@@ -1,4 +1,4 @@
-//! Core of whoosh2garmin, shared by the command line and the desktop app.
+//! Core of domestique, shared by the command line and the desktop app.
 
 pub mod config;
 pub mod fit;

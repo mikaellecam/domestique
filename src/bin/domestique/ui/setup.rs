@@ -7,7 +7,7 @@ const STEPS: [&str; 4] = ["MyWhoosh", "Garmin Connect", "Device", "Your rides"];
 
 impl App {
     pub(super) fn setup_page(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Set up whoosh2garmin");
+        ui.heading("Set up Domestique");
         ui.weak(format!("Step {} of 4: {}", self.step + 1, STEPS[self.step]));
         ui.add_space(12.0);
         match self.step {

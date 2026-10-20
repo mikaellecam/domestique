@@ -185,9 +185,9 @@ pub fn save_status(rides: &[Ride]) -> Result<()> {
 }
 
 /// Where MyWhoosh saves the latest ride on this computer, if it is installed
-/// here. WHOOSH2GARMIN_RIDE_DIR overrides it, to test on any system.
+/// here. DOMESTIQUE_RIDE_DIR overrides it, to test on any system.
 pub fn local_ride_dir() -> Option<PathBuf> {
-    if let Some(d) = env::var_os("WHOOSH2GARMIN_RIDE_DIR") {
+    if let Some(d) = env::var_os("DOMESTIQUE_RIDE_DIR") {
         return Some(d.into());
     }
     let dir = if cfg!(windows) {
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn upload_records_the_status() {
-        let dir = env::temp_dir().join("whoosh2garmin-sync-tests");
+        let dir = env::temp_dir().join("domestique-sync-tests");
         let _ = fs::remove_dir_all(&dir);
         // SAFETY: no other test of this crate reads the environment.
         unsafe {

@@ -55,7 +55,7 @@ pub fn dir() -> PathBuf {
             .map(PathBuf::from)
             .or_else(|| home().map(|h| h.join(".config")))
     };
-    base.unwrap_or_default().join("whoosh2garmin")
+    base.unwrap_or_default().join("domestique")
 }
 
 pub fn path() -> PathBuf {

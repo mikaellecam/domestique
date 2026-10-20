@@ -860,6 +860,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "domestique"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui_kittest",
+ "embedded-io-adapters",
+ "jiff",
+ "notify",
+ "rpassword",
+ "rustyfit",
+ "serde",
+ "serde_json",
+ "tauri-winrt-notification",
+ "tray-icon",
+ "ureq",
+ "windows-registry",
+ "winit",
+ "zbus",
+]
+
+[[package]]
 name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4370,27 +4391,6 @@ dependencies = [
  "raw-window-handle",
  "static_assertions",
  "web-sys",
-]
-
-[[package]]
-name = "whoosh2garmin"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "egui_kittest",
- "embedded-io-adapters",
- "jiff",
- "notify",
- "rpassword",
- "rustyfit",
- "serde",
- "serde_json",
- "tauri-winrt-notification",
- "tray-icon",
- "ureq",
- "windows-registry",
- "winit",
- "zbus",
 ]
 
 [[package]]

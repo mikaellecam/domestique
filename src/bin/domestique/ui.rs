@@ -7,25 +7,25 @@ mod setup;
 #[cfg(test)]
 mod tests;
 
+use domestique::config::{self, Config};
+use domestique::sync::{self, Ride, Status};
+use domestique::{Result, fit, garmin, mywhoosh};
 use eframe::egui;
 use jiff::{Timestamp, tz::TimeZone};
 use std::sync::{LazyLock, mpsc};
 use std::{fs, thread};
-use whoosh2garmin::config::{self, Config};
-use whoosh2garmin::sync::{self, Ride, Status};
-use whoosh2garmin::{Result, fit, garmin, mywhoosh};
 
 pub fn run() -> Result<()> {
     let app = App::new(config::load()?, sync::local_ride_dir().is_some());
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("whoosh2garmin")
-            .with_app_id("whoosh2garmin")
+            .with_title("Domestique")
+            .with_app_id("domestique")
             .with_inner_size([560.0, 640.0])
             .with_min_inner_size([400.0, 360.0]),
         ..Default::default()
     };
-    eframe::run_native("whoosh2garmin", options, Box::new(|_| Ok(Box::new(app))))
+    eframe::run_native("domestique", options, Box::new(|_| Ok(Box::new(app))))
         .map_err(|e| e.to_string())?;
     Ok(())
 }

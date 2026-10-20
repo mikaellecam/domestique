@@ -1,19 +1,19 @@
 //! Command line: sync from a terminal or cron, with the desktop app's settings.
 
+use domestique::sync::{self, Status};
+use domestique::{Result, config, fit, garmin, mywhoosh, utc_string};
 use std::io::Write;
 use std::{env, fs};
-use whoosh2garmin::sync::{self, Status};
-use whoosh2garmin::{Result, config, fit, garmin, mywhoosh, utc_string};
 
 const USAGE: &str = "\
 usage:
-  whoosh2garmin login                          sign in to MyWhoosh (optional) and Garmin
-  whoosh2garmin sync [--device NAME] [--days N] [--dry-run]
+  domestique-cli login                         sign in to MyWhoosh (optional) and Garmin
+  domestique-cli sync [--device NAME] [--days N] [--dry-run]
                                                upload the rides Garmin does not have yet;
                                                defaults come from the app's settings
-  whoosh2garmin rewrite IN.fit OUT.fit --device NAME
+  domestique-cli rewrite IN.fit OUT.fit --device NAME
                                                rewrite one file without uploading it
-  whoosh2garmin devices                        list device names, e.g. edge_explore2";
+  domestique-cli devices                       list device names, e.g. edge_explore2";
 
 fn main() {
     if let Err(e) = run() {
@@ -34,7 +34,7 @@ fn run() -> Result<()> {
             return Ok(None);
         };
         Ok(Some(fit::product_id(name).ok_or(format!(
-            "unknown device {name:?}, see `whoosh2garmin devices`"
+            "unknown device {name:?}, see `domestique-cli devices`"
         ))?))
     };
     match args.first().map(String::as_str) {
@@ -48,7 +48,7 @@ fn run() -> Result<()> {
             }
             cfg.auto_upload = true; // the command line never asks
             if cfg.device.is_none() && !dry_run {
-                return Err("missing --device NAME, see `whoosh2garmin devices`".into());
+                return Err("missing --device NAME, see `domestique-cli devices`".into());
             }
             let rides = if dry_run {
                 sync::check(&mut cfg)?
@@ -68,7 +68,7 @@ fn run() -> Result<()> {
             Ok(())
         }
         Some("rewrite") if args.len() >= 3 => {
-            let device = device()?.ok_or("missing --device NAME, see `whoosh2garmin devices`")?;
+            let device = device()?.ok_or("missing --device NAME, see `domestique-cli devices`")?;
             Ok(fs::write(
                 &args[2],
                 fit::rewrite(&fs::read(&args[1])?, device)?,

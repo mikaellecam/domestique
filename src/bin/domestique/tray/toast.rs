@@ -11,10 +11,10 @@ pub fn show(proxy: &EventLoopProxy<Msg>, title: &str, body: &str, upload: Option
     // Windows shows a notification only for a registered app id, and names it
     // after it. Store apps and installers register theirs; this exe registers
     // one under HKCU, the way the Windows App SDK does for unpackaged apps.
-    const APP_ID: &str = "whoosh2garmin";
+    const APP_ID: &str = "domestique";
     let registered = windows_registry::CURRENT_USER
         .create(format!(r"Software\Classes\AppUserModelId\{APP_ID}"))
-        .and_then(|key| key.set_string("DisplayName", "whoosh2garmin"));
+        .and_then(|key| key.set_string("DisplayName", "Domestique"));
     if let Err(e) = registered {
         eprintln!("can't register for notifications: {e}");
     }
@@ -44,16 +44,7 @@ pub fn show(_: &EventLoopProxy<Msg>, title: &str, body: &str, _: Option<i64>) {
     let notify = || -> zbus::Result<()> {
         let hints = std::collections::HashMap::<&str, zbus::zvariant::Value>::new();
         let actions = Vec::<&str>::new();
-        let args = (
-            "whoosh2garmin",
-            0u32,
-            "",
-            title,
-            body,
-            actions,
-            hints,
-            -1i32,
-        );
+        let args = ("Domestique", 0u32, "", title, body, actions, hints, -1i32);
         zbus::blocking::Connection::session()?.call_method(
             Some("org.freedesktop.Notifications"),
             "/org/freedesktop/Notifications",
@@ -73,7 +64,7 @@ pub fn show(_: &EventLoopProxy<Msg>, title: &str, body: &str, _: Option<i64>) {
 pub fn show(_: &EventLoopProxy<Msg>, title: &str, body: &str, _: Option<i64>) {
     let quote = |s: &str| format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""));
     let script = format!(
-        "display notification {} with title \"whoosh2garmin\" subtitle {}",
+        "display notification {} with title \"Domestique\" subtitle {}",
         quote(body),
         quote(title)
     );

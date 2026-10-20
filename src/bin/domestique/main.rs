@@ -6,7 +6,7 @@ mod autostart;
 mod tray;
 mod ui;
 
-fn main() -> whoosh2garmin::Result<()> {
+fn main() -> domestique::Result<()> {
     if std::env::args().any(|a| a == "--window") {
         ui::run()
     } else {

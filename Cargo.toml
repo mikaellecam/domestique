@@ -1,8 +1,8 @@
 [package]
-name = "whoosh2garmin"
+name = "domestique"
 version = "0.1.0"
 edition = "2024"
-default-run = "whoosh2garmin"
+default-run = "domestique"
 
 [dependencies]
 eframe = { version = "0.37", default-features = false, features = ["accesskit", "clipboard", "default_fonts", "glow", "links", "wayland", "x11"] }

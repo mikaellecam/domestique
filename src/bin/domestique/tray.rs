@@ -8,6 +8,9 @@
 mod toast;
 
 use crate::autostart;
+use domestique::Result;
+use domestique::config::{self, Config};
+use domestique::sync::{self, Ride, Status};
 use std::fs::{self, OpenOptions, TryLockError};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
@@ -16,9 +19,6 @@ use std::time::{Duration, Instant};
 use std::{env, thread};
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
-use whoosh2garmin::Result;
-use whoosh2garmin::config::{self, Config};
-use whoosh2garmin::sync::{self, Ride, Status};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
@@ -100,7 +100,7 @@ pub fn run() -> Result<()> {
         watcher: None,
         busy: false,
         queue: Vec::new(),
-        test_delay: env::var("WHOOSH2GARMIN_DELAY_SECS")
+        test_delay: env::var("DOMESTIQUE_DELAY_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
             .map(Duration::from_secs),
@@ -162,7 +162,7 @@ struct App {
     /// A sync or upload is running; others wait in `queue`.
     busy: bool,
     queue: Vec<Job>,
-    /// WHOOSH2GARMIN_DELAY_SECS, for tests: replaces STARTUP_DELAY, QUIET and RETRY.
+    /// DOMESTIQUE_DELAY_SECS, for tests: replaces STARTUP_DELAY, QUIET and RETRY.
     test_delay: Option<Duration>,
     /// For the startup sync, then the ride file going quiet.
     sync_due: Option<Instant>,
@@ -282,7 +282,7 @@ impl App {
             &MenuItem::with_id("quit", "Quit", true, None),
         ])?;
         Ok(TrayIconBuilder::new()
-            .with_id("whoosh2garmin")
+            .with_id("domestique")
             .with_menu(Box::new(menu))
             .with_menu_on_left_click(false)
             .with_icon(icon(false))
@@ -346,7 +346,7 @@ impl App {
                 let e = e.to_string();
                 if self.error.as_ref() != Some(&e) {
                     if sign_in_needed(&e) {
-                        let body = "Open whoosh2garmin to sign in again.";
+                        let body = "Open Domestique to sign in again.";
                         toast::show(&self.proxy, "Garmin sign-in needed", body, None);
                     } else {
                         toast::show(&self.proxy, "Sync failed", &e, None);
@@ -425,7 +425,7 @@ impl App {
                 .iter()
                 .any(|r| matches!(r.status, Status::Waiting | Status::Failed(_)));
         if let Some(tray) = &self.tray {
-            let _ = tray.set_tooltip(Some(format!("whoosh2garmin\n{text}")));
+            let _ = tray.set_tooltip(Some(format!("Domestique\n{text}")));
             let _ = tray.set_icon(Some(icon(alert)));
         }
     }
@@ -522,7 +522,7 @@ fn icon(alert: bool) -> Icon {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use whoosh2garmin::sync::Source;
+    use domestique::sync::Source;
 
     fn ride(start: i64, status: Status) -> Ride {
         let source = Source::Cloud {

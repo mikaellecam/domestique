@@ -124,7 +124,7 @@ pub fn activities_since(token: &str, since: i64) -> Result<Vec<(i64, i64)>> {
 /// Uploads the activity and names it `title`. Returns false when Garmin
 /// already has it.
 pub fn upload(token: &str, name: &str, title: &str, fit: &[u8]) -> Result<bool> {
-    const BOUNDARY: &str = "whoosh2garmin-7f3a9c1e5b2d";
+    const BOUNDARY: &str = "domestique-7f3a9c1e5b2d";
     let mut body = format!(
         "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\n\
          Content-Type: application/octet-stream\r\n\r\n"

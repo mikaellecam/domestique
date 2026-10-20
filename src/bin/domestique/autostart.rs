@@ -1,9 +1,9 @@
 //! Starting the tray process when the user logs in.
 
+use domestique::Result;
 use std::env;
-use whoosh2garmin::Result;
 
-const NAME: &str = "whoosh2garmin";
+const NAME: &str = "Domestique";
 
 /// Turns starting the app at login on or off. It starts this exe where it
 /// is now, so after moving the exe the setting needs saving again.
@@ -41,7 +41,7 @@ pub fn set(enabled: bool) -> Result<()> {
             (path.join(format!("{NAME}.plist")), plist)
         } else {
             // XDG autostart, in $XDG_CONFIG_HOME or ~/.config like our own folder.
-            let path = whoosh2garmin::config::dir().with_file_name("autostart");
+            let path = domestique::config::dir().with_file_name("autostart");
             let desktop =
                 format!("[Desktop Entry]\nType=Application\nName={NAME}\nExec=\"{exe}\"\n");
             (path.join(format!("{NAME}.desktop")), desktop)
