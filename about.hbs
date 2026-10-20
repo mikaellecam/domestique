@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Domestique: third-party licences</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 0 1em; }
+        pre { white-space: pre-wrap; background: #f4f4f4; padding: 1em; }
+        @media (prefers-color-scheme: dark) {
+            body { background: #222; color: #ddd; }
+            pre { background: #333; }
+            a { color: skyblue; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Third-party licences</h1>
+    <p>Domestique is built with the following open source crates, under these licences.</p>
+    <ul>
+        {{#each overview}}
+        <li><a href="#{{id}}">{{name}}</a> ({{count}})</li>
+        {{/each}}
+    </ul>
+    {{#each licenses}}
+    <h2 id="{{id}}">{{name}}</h2>
+    <p>Used by:
+        {{#each used_by}}
+        <a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">{{crate.name}} {{crate.version}}</a>{{#unless @last}},{{/unless}}
+        {{/each}}
+    </p>
+    <pre>{{text}}</pre>
+    {{/each}}
+</body>
+</html>
