@@ -185,6 +185,15 @@ settings have one):
 - Windows:
   `schtasks /create /sc hourly /tn Domestique /tr "%LOCALAPPDATA%\Programs\Domestique\domestique-cli.exe sync --device edge_explore2"`
 
+## Releasing
+
+1. Set the new version in `Cargo.toml`, build so that `Cargo.lock` follows, commit, and push a tag
+   `vX.Y.Z` of that version. The release workflow stops if the two differ.
+2. Wait for the workflow to put the three archives in a draft release.
+3. Run `scripts/sign-release.sh vX.Y.Z`. It writes `SHA256SUMS` for the draft's archives, signs it
+   with `~/.minisign/domestique.key` (or `$MINISIGN_KEY`), checks the signature against
+   `minisign.pub`, uploads both files and publishes the release. The apps offer it from then on.
+
 ## Credits
 
 Domestique builds on what these projects worked out:
