@@ -231,11 +231,8 @@ impl App {
         self.error = None;
         self.upload = spawn(ctx, move |send| {
             for (i, ride) in todo {
-                let status = match sync::upload(&mut cfg, &ride) {
-                    Ok(true) => Status::Uploaded,
-                    Ok(false) => Status::OnGarmin,
-                    Err(e) => Status::Failed(e.to_string()),
-                };
+                let status = sync::upload_and_record(&mut cfg, &ride)
+                    .unwrap_or_else(|e| Status::Failed(e.to_string()));
                 send(Some((i, status)));
             }
             send(None);
@@ -243,9 +240,11 @@ impl App {
     }
 
     fn uploads_done(&mut self) {
-        let r = sync::save_status(&self.rides);
-        self.report(r);
         if self.page == Page::Setup {
+            // The review stands for the last sync, so the tray doesn't
+            // announce the rides it showed as new.
+            let r = sync::save_status(&self.rides);
+            self.report(r);
             self.finish_setup();
         }
     }

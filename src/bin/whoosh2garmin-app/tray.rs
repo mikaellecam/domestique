@@ -431,21 +431,13 @@ fn watch(dir: &Path, proxy: EventLoopProxy<Msg>) -> notify::Result<notify::Recom
     Ok(watcher)
 }
 
-/// Uploads a ride the last sync listed, and records the result for the window.
+/// Uploads a ride the last sync listed. Returns the rides' new status.
 fn upload(start: i64) -> Result<Vec<Ride>> {
-    let mut cfg = config::load()?;
-    let mut rides = sync::load_status();
-    let ride = rides
-        .iter_mut()
+    let ride = (sync::load_status().into_iter())
         .find(|r| r.start == start)
         .ok_or("the ride is no longer in the list")?;
-    ride.status = match sync::upload(&mut cfg, ride) {
-        Ok(true) => Status::Uploaded,
-        Ok(false) => Status::OnGarmin,
-        Err(e) => Status::Failed(e.to_string()),
-    };
-    sync::save_status(&rides)?;
-    Ok(rides)
+    sync::upload_and_record(&mut config::load()?, &ride)?;
+    Ok(sync::load_status())
 }
 
 /// The rides that are new or whose status differs from `before`.
