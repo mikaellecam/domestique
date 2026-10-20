@@ -6,7 +6,8 @@ use std::env;
 const NAME: &str = "Domestique";
 
 /// Turns starting the app at login on or off. It starts this exe where it
-/// is now, so after moving the exe the setting needs saving again.
+/// is now; the tray sets it again each time it starts, so a moved exe only
+/// needs starting once.
 pub fn set(enabled: bool) -> Result<()> {
     let exe = env::current_exe()?.display().to_string();
     #[cfg(windows)]

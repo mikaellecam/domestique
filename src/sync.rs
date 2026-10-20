@@ -39,8 +39,8 @@ pub struct Ride {
 }
 
 /// The rides of the last `cfg.days` days, oldest first, from the MyWhoosh
-/// account (when there is one) and from this computer, each marked OnGarmin
-/// or Waiting.
+/// account (when there is one) and from this computer, each marked from
+/// Garmin's list and the last sync, plus older rides the user skipped.
 pub fn check(cfg: &mut Config) -> Result<Vec<Ride>> {
     let since = now() - cfg.days * 86_400;
     let mut rides = Vec::new();
@@ -78,6 +78,7 @@ pub fn check(cfg: &mut Config) -> Result<Vec<Ride>> {
             r.status = Status::OnGarmin;
         }
     }
+    settle(&mut rides, load_status());
     Ok(rides)
 }
 
@@ -137,34 +138,36 @@ fn upload_file(cfg: &mut Config, ride: &Ride) -> Result<bool> {
 /// when uploads are automatic. Saves the result for the other process to show.
 pub fn run(cfg: &mut Config) -> Result<Vec<Ride>> {
     let mut rides = check(cfg)?;
-    let auto = cfg.auto_upload;
-    settle(&mut rides, &load_status(), |r| {
-        if auto {
-            upload(cfg, r)
-        } else {
-            Status::Waiting
+    if cfg.auto_upload {
+        for r in &mut rides {
+            if r.status == Status::Waiting {
+                r.status = upload(cfg, r);
+            }
         }
-    });
+    }
     save_status(&rides)?;
     Ok(rides)
 }
 
 /// Settles what `check` found against the last sync: a ride this app
-/// uploaded stays Uploaded, one the user skipped stays Skipped until it
-/// shows up on Garmin, and the others missing from Garmin go to `upload`.
-fn settle(rides: &mut [Ride], before: &[Ride], mut upload: impl FnMut(&Ride) -> Status) {
-    for r in rides {
-        let was = before
-            .iter()
-            .find(|b| b.start == r.start)
-            .map(|b| &b.status);
-        r.status = match (&r.status, was) {
-            (Status::OnGarmin, Some(Status::Uploaded)) => Status::Uploaded,
-            (Status::Waiting, Some(Status::Skipped)) => Status::Skipped,
-            (Status::Waiting, _) => upload(r),
-            (status, _) => status.clone(),
-        };
+/// uploaded stays Uploaded, and one the user skipped stays Skipped until it
+/// shows up on Garmin. Skipped rides are kept once older than the look-back
+/// too, so looking further back later doesn't upload them.
+fn settle(rides: &mut Vec<Ride>, before: Vec<Ride>) {
+    for r in rides.iter_mut() {
+        let was = before.iter().find(|b| b.start == r.start);
+        match (&r.status, was.map(|b| &b.status)) {
+            (Status::OnGarmin, Some(Status::Uploaded)) => r.status = Status::Uploaded,
+            (Status::Waiting, Some(Status::Skipped)) => r.status = Status::Skipped,
+            _ => {}
+        }
     }
+    let gone: Vec<Ride> = before
+        .into_iter()
+        .filter(|b| b.status == Status::Skipped && !rides.iter().any(|r| r.start == b.start))
+        .collect();
+    rides.extend(gone);
+    rides.sort_by_key(|r| r.start);
 }
 
 /// The rides of the last sync, by whichever process ran it.
@@ -275,24 +278,35 @@ mod tests {
     }
 
     #[test]
-    fn skipped_is_kept_and_not_uploaded() {
+    fn skipped_and_uploaded_are_kept() {
         use Status::*;
-        let before = [ride(1, Skipped), ride(2, Skipped), ride(3, Uploaded)];
-        // As `check` finds them: 2 has since shown up on Garmin, 4 is new.
-        let mut rides = [
-            ride(1, Waiting),
-            ride(2, OnGarmin),
-            ride(3, OnGarmin),
-            ride(4, Waiting),
+        let before = vec![
+            ride(0, Uploaded),
+            ride(1, Skipped),
+            ride(2, Skipped),
+            ride(3, Skipped),
+            ride(4, Uploaded),
         ];
-        let mut uploads = Vec::new();
-        settle(&mut rides, &before, |r| {
-            uploads.push(r.start);
-            Uploaded
-        });
-        assert_eq!(uploads, [4]);
-        let statuses: Vec<_> = rides.into_iter().map(|r| r.status).collect();
-        assert_eq!(statuses, [Skipped, OnGarmin, Uploaded, Uploaded]);
+        // As `check` finds them: 0 and 1 are older than the look-back, 3 has
+        // since shown up on Garmin, 5 is new.
+        let mut rides = vec![
+            ride(2, Waiting),
+            ride(3, OnGarmin),
+            ride(4, OnGarmin),
+            ride(5, Waiting),
+        ];
+        settle(&mut rides, before);
+        let statuses: Vec<_> = rides.into_iter().map(|r| (r.start, r.status)).collect();
+        assert_eq!(
+            statuses,
+            [
+                (1, Skipped),
+                (2, Skipped),
+                (3, OnGarmin),
+                (4, Uploaded),
+                (5, Waiting)
+            ]
+        );
     }
 
     #[test]
