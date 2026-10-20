@@ -4,7 +4,7 @@
 
 use crate::{Result, now, parse_utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 
@@ -121,8 +121,9 @@ pub fn activities_since(token: &str, since: i64) -> Result<Vec<(i64, i64)>> {
     Ok(out)
 }
 
-/// Returns false when Garmin already has the activity.
-pub fn upload(token: &str, name: &str, fit: &[u8]) -> Result<bool> {
+/// Uploads the activity and names it `title`. Returns false when Garmin
+/// already has it.
+pub fn upload(token: &str, name: &str, title: &str, fit: &[u8]) -> Result<bool> {
     const BOUNDARY: &str = "whoosh2garmin-7f3a9c1e5b2d";
     let mut body = format!(
         "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\n\
@@ -146,6 +147,18 @@ pub fn upload(token: &str, name: &str, fit: &[u8]) -> Result<bool> {
     let failures = &r["detailedImportResult"]["failures"];
     if failures.as_array().is_some_and(|f| !f.is_empty()) {
         return Err(format!("Garmin rejected {name}: {failures}").into());
+    }
+    // Garmin would call it "Virtual Cycling". The name is cosmetic, so failing
+    // to set it doesn't fail the upload.
+    if let Some(id) = r["detailedImportResult"]["successes"][0]["internalId"].as_u64() {
+        let renamed = api(
+            ureq::put(format!("{API}/activity-service/activity/{id}")),
+            token,
+        )
+        .send_json(json!({ "activityId": id, "activityName": title }));
+        if let Err(e) = renamed {
+            eprintln!("can't name Garmin activity {id}: {e}");
+        }
     }
     Ok(true)
 }

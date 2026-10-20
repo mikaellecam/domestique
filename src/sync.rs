@@ -129,7 +129,8 @@ fn upload_file(cfg: &mut Config, ride: &Ride) -> Result<bool> {
         }
     };
     let data = fit::rewrite(&raw, device)?;
-    garmin::upload(&garmin_token(cfg)?, &format!("{}.fit", ride.start), &data)
+    let name = format!("{}.fit", ride.start);
+    garmin::upload(&garmin_token(cfg)?, &name, &ride.title, &data)
 }
 
 /// One sync: check, then upload what Garmin is missing and the user didn't skip,
