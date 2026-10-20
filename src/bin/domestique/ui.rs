@@ -12,10 +12,16 @@ use domestique::sync::{self, Ride, Status};
 use domestique::{Result, fit, garmin, mywhoosh};
 use eframe::egui;
 use jiff::{Timestamp, tz::TimeZone};
+use std::io::Read;
 use std::sync::{LazyLock, mpsc};
 use std::{fs, thread};
 
 pub fn run() -> Result<()> {
+    // The tray holds the other end of stdin: close when it quits.
+    thread::spawn(|| {
+        let _ = std::io::stdin().read(&mut [0]);
+        std::process::exit(0);
+    });
     let app = App::new(config::load()?, sync::local_ride_dir().is_some());
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

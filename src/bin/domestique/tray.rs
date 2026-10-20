@@ -14,7 +14,7 @@ use domestique::sync::{self, Ride, Status};
 use std::fs::{self, OpenOptions, TryLockError};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
-use std::process::Command;
+use std::process::{ChildStdin, Command, Stdio};
 use std::time::{Duration, Instant};
 use std::{env, thread};
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem};
@@ -96,7 +96,7 @@ pub fn run() -> Result<()> {
         tray: None,
         status: MenuItem::new("", false, None),
         sync_now: MenuItem::with_id("sync", "Sync now", true, None),
-        window: false,
+        window: None,
         watcher: None,
         busy: false,
         queue: Vec::new(),
@@ -156,8 +156,9 @@ struct App {
     tray: Option<TrayIcon>,
     status: MenuItem,
     sync_now: MenuItem,
-    /// A window process is running.
-    window: bool,
+    /// The open window's stdin. The window exits when it closes, so it
+    /// quits along with the tray.
+    window: Option<ChildStdin>,
     watcher: Option<notify::RecommendedWatcher>,
     /// A sync or upload is running; others wait in `queue`.
     busy: bool,
@@ -209,7 +210,7 @@ impl ApplicationHandler<Msg> for App {
             },
             Msg::Open => self.open_window(),
             Msg::WindowClosed => {
-                self.window = false;
+                self.window = None;
                 let was_setup = self.cfg.setup_done;
                 match config::load() {
                     Ok(cfg) => self.cfg = cfg,
@@ -382,12 +383,16 @@ impl App {
     }
 
     fn open_window(&mut self) {
-        if self.window {
+        if self.window.is_some() {
             return;
         }
-        match env::current_exe().and_then(|exe| Command::new(exe).arg("--window").spawn()) {
+        let spawned = env::current_exe().and_then(|exe| {
+            let mut window = Command::new(exe);
+            window.arg("--window").stdin(Stdio::piped()).spawn()
+        });
+        match spawned {
             Ok(mut child) => {
-                self.window = true;
+                self.window = child.stdin.take();
                 let proxy = self.proxy.clone();
                 thread::spawn(move || {
                     let _ = child.wait();
