@@ -2,6 +2,9 @@
 name = "domestique"
 version = "0.1.0"
 edition = "2024"
+description = "Syncs MyWhoosh rides to Garmin Connect as if a Garmin device had recorded them"
+license = "MIT"
+repository = "https://github.com/mikaellecam/domestique"
 default-run = "domestique"
 
 [dependencies]
