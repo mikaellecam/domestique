@@ -108,11 +108,24 @@ impl App {
                 .suffix(" days");
             changed |= ui.add(days).labelled_by(label.id).changed();
         });
+
+        section(ui, "Updates");
+        changed |= (ui.checkbox(&mut self.cfg.check_updates, "Check for updates"))
+            .on_hover_text("Once a day, on GitHub")
+            .changed();
+        ui.weak(format!("This is Domestique {VERSION}."));
         if changed {
             self.save();
         }
     }
 }
+
+/// Fixed in tests, so that the snapshot doesn't change with each release.
+const VERSION: &str = if cfg!(test) {
+    "0.0.0"
+} else {
+    env!("CARGO_PKG_VERSION")
+};
 
 fn section(ui: &mut egui::Ui, title: &str) {
     ui.add_space(16.0);

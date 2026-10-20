@@ -3,9 +3,11 @@
 //!
 //! It blocks in the OS event loop and wakes only for a click, a change in
 //! MyWhoosh's ride folder, a second launch, a finished sync, or a deadline:
-//! the startup sync, the ride file going quiet, a retry, or the periodic check.
+//! the startup sync, the ride file going quiet, a retry, the periodic check,
+//! or the daily update check.
 
 mod toast;
+mod update;
 
 use crate::autostart;
 use domestique::Result;
@@ -17,6 +19,7 @@ use std::path::Path;
 use std::process::{ChildStdin, Command, Stdio};
 use std::time::{Duration, Instant};
 use std::{env, thread};
+use toast::Button;
 use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use winit::application::ApplicationHandler;
@@ -32,6 +35,7 @@ const QUIET: Duration = Duration::from_secs(2 * 60);
 /// A failed sync is tried once more after this.
 const RETRY: Duration = Duration::from_secs(15 * 60);
 const PERIOD: Duration = Duration::from_secs(30 * 60);
+const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub enum Msg {
     Menu(MenuId),
@@ -44,20 +48,27 @@ pub enum Msg {
     /// The Upload button of a waiting ride's notification, on Windows.
     #[cfg_attr(not(windows), allow(dead_code))]
     Upload(i64),
+    /// An update check found this newer version, or none.
+    Checked(Result<Option<update::Release>>),
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Job {
     Sync,
     /// The one retry of a failed sync.
     Retry,
     Upload(i64),
+    /// Installs the new version and starts it; the tray then quits.
+    Update(update::Release),
 }
 
 pub fn run() -> Result<()> {
     let Some((_lock, listener)) = first_instance()? else {
         return Ok(());
     };
+    if let Ok(exe) = env::current_exe() {
+        update::clean_up(&exe);
+    }
     #[allow(unused_mut)]
     let mut builder = EventLoop::with_user_event();
     #[cfg(target_os = "macos")]
@@ -94,11 +105,13 @@ pub fn run() -> Result<()> {
         proxy,
         cfg: config::load()?,
         tray: None,
+        menu: Menu::new(),
         status: MenuItem::new("", false, None),
         sync_now: MenuItem::with_id("sync", "Sync now", true, None),
+        update_now: MenuItem::with_id("update", "", true, None),
         window: None,
         watcher: None,
-        busy: false,
+        running: None,
         queue: Vec::new(),
         test_delay: env::var("DOMESTIQUE_DELAY_SECS")
             .ok()
@@ -107,6 +120,8 @@ pub fn run() -> Result<()> {
         sync_due: None,
         retry_due: None,
         check_due: None,
+        update_due: None,
+        update: None,
         rides: sync::load_status(),
         last_sync: None,
         error: None,
@@ -119,6 +134,8 @@ pub fn run() -> Result<()> {
 /// loopback port saved in tray.port. A second launch finds the lock taken,
 /// connects to the port so that the running tray opens the window, and
 /// exits. The OS drops the lock when the process ends, even on a crash.
+///
+/// A tray that an update started waits for the old one to quit instead.
 fn first_instance() -> Result<Option<(fs::File, TcpListener)>> {
     let dir = config::dir();
     fs::create_dir_all(&dir)?;
@@ -127,7 +144,14 @@ fn first_instance() -> Result<Option<(fs::File, TcpListener)>> {
         .truncate(false)
         .write(true)
         .open(dir.join("tray.lock"))?;
-    match lock.try_lock() {
+    let mut locked = lock.try_lock();
+    let updated = env::args().any(|a| a == "--updated");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while updated && matches!(locked, Err(TryLockError::WouldBlock)) && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(100));
+        locked = lock.try_lock();
+    }
+    match locked {
         Ok(()) => {
             let listener = TcpListener::bind("127.0.0.1:0")?;
             fs::write(
@@ -154,14 +178,17 @@ struct App {
     cfg: Config,
     /// Created once the event loop runs, as macOS requires.
     tray: Option<TrayIcon>,
+    menu: Menu,
     status: MenuItem,
     sync_now: MenuItem,
+    /// In the menu once there is a new version.
+    update_now: MenuItem,
     /// The open window's stdin. The window exits when it closes, so it
     /// quits along with the tray.
     window: Option<ChildStdin>,
     watcher: Option<notify::RecommendedWatcher>,
-    /// A sync or upload is running; others wait in `queue`.
-    busy: bool,
+    /// The sync, upload or update running; others wait in `queue`.
+    running: Option<Job>,
     queue: Vec<Job>,
     /// DOMESTIQUE_DELAY_SECS, for tests: replaces STARTUP_DELAY, QUIET and RETRY.
     test_delay: Option<Duration>,
@@ -169,6 +196,9 @@ struct App {
     sync_due: Option<Instant>,
     retry_due: Option<Instant>,
     check_due: Option<Instant>,
+    update_due: Option<Instant>,
+    /// A newer version, found by an update check.
+    update: Option<update::Release>,
     /// As of the last sync, by this process or the window.
     rides: Vec<Ride>,
     /// Local time of the last sync, and how many rides it uploaded.
@@ -200,9 +230,14 @@ impl ApplicationHandler<Msg> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, msg: Msg) {
         match msg {
             Msg::Menu(id) => match id.as_ref() {
-                "sync" if !self.busy => {
+                "sync" if self.running.is_none() => {
                     self.error = None; // asked for: report a failure even if it repeats
                     self.request(Job::Sync);
+                }
+                "update" => {
+                    if let Some(release) = self.update.clone() {
+                        self.request(Job::Update(release));
+                    }
                 }
                 "open" => self.open_window(),
                 "quit" => event_loop.exit(),
@@ -228,14 +263,24 @@ impl ApplicationHandler<Msg> for App {
                 return;
             }
             Msg::Done(job, before, result) => {
-                self.busy = false;
-                self.done(job, &before, result);
+                self.running = None;
+                match (job, result) {
+                    (Job::Update(_), Ok(_)) => return event_loop.exit(), // for the new version
+                    (Job::Update(release), Err(e)) => {
+                        let title = format!("Couldn't update to {}", release.version());
+                        toast::show(&self.proxy, &title, &e.to_string(), None);
+                    }
+                    (job, result) => self.done(job, &before, result),
+                }
                 if !self.queue.is_empty() {
                     let job = self.queue.remove(0);
                     self.request(job);
                 }
             }
             Msg::Upload(start) => self.request(Job::Upload(start)),
+            Msg::Checked(Ok(Some(release))) => self.offer(release),
+            Msg::Checked(Ok(None)) => {}
+            Msg::Checked(Err(e)) => eprintln!("can't check for updates: {e}"),
         }
         self.refresh();
     }
@@ -258,7 +303,19 @@ impl ApplicationHandler<Msg> for App {
             self.request(Job::Sync);
             self.refresh();
         }
-        let next = [self.sync_due, self.retry_due, self.check_due];
+        if self.update_due.is_some_and(|t| t <= now) {
+            self.update_due = Some(now + DAY);
+            let proxy = self.proxy.clone();
+            thread::spawn(move || {
+                let _ = proxy.send_event(Msg::Checked(update::check()));
+            });
+        }
+        let next = [
+            self.sync_due,
+            self.retry_due,
+            self.check_due,
+            self.update_due,
+        ];
         event_loop.set_control_flow(match next.into_iter().flatten().min() {
             Some(t) => ControlFlow::WaitUntil(t),
             None => ControlFlow::Wait,
@@ -274,7 +331,7 @@ impl App {
     }
 
     fn build_tray(&self) -> Result<TrayIcon> {
-        let menu = Menu::with_items(&[
+        self.menu.append_items(&[
             &self.status,
             &PredefinedMenuItem::separator(),
             &self.sync_now,
@@ -284,7 +341,7 @@ impl App {
         ])?;
         Ok(TrayIconBuilder::new()
             .with_id("domestique")
-            .with_menu(Box::new(menu))
+            .with_menu(Box::new(self.menu.clone()))
             .with_menu_on_left_click(false)
             .with_icon(icon(false))
             .build()?)
@@ -304,6 +361,12 @@ impl App {
             }
         }
         self.check_due = (on && self.cfg.periodic_check).then(|| Instant::now() + PERIOD);
+        // Kept when already set: the window closing doesn't move the daily check.
+        if !self.cfg.check_updates {
+            self.update_due = None;
+        } else if self.update_due.is_none() {
+            self.update_due = Some(Instant::now() + self.delay(STARTUP_DELAY));
+        }
         if on && let Err(e) = autostart::set(self.cfg.start_with_os) {
             eprintln!("can't change starting with the computer: {e}");
         }
@@ -311,25 +374,41 @@ impl App {
 
     /// Runs `job` in a worker thread, or after the running one.
     fn request(&mut self, job: Job) {
-        if !self.cfg.setup_done {
+        if !self.cfg.setup_done && !matches!(job, Job::Update(_)) {
             return self.open_window();
         }
-        if self.busy {
+        if self.running.is_some() {
             if !self.queue.contains(&job) {
                 self.queue.push(job);
             }
             return;
         }
-        self.busy = true;
+        self.running = Some(job.clone());
         let proxy = self.proxy.clone();
         thread::spawn(move || {
             let before = sync::load_status();
-            let result = match job {
+            let result = match &job {
                 Job::Sync | Job::Retry => config::load().and_then(|mut cfg| sync::run(&mut cfg)),
-                Job::Upload(start) => upload(start),
+                Job::Upload(start) => upload(*start),
+                Job::Update(release) => update::install(release).map(|()| Vec::new()),
             };
             let _ = proxy.send_event(Msg::Done(job, before, result));
         });
+    }
+
+    /// Offers a new version in the menu, and tells about it once.
+    fn offer(&mut self, release: update::Release) {
+        let version = release.version();
+        if self.update.as_ref().is_some_and(|u| u.version() == version) {
+            return;
+        }
+        self.update_now.set_text(format!("Update to {version}"));
+        if self.update.is_none() {
+            let _ = self.menu.insert(&self.update_now, 2);
+        }
+        let title = format!("Domestique {version} is available");
+        toast::show(&self.proxy, &title, "", Some(Button::Update));
+        self.update = Some(release);
     }
 
     fn done(&mut self, job: Job, before: &[Ride], result: Result<Vec<Ride>>) {
@@ -367,7 +446,8 @@ impl App {
                 }
                 Status::Waiting => {
                     let title = format!("New ride: {}", r.title);
-                    toast::show(&self.proxy, &title, "Not on Garmin yet.", Some(r.start));
+                    let upload = Some(Button::Upload(r.start));
+                    toast::show(&self.proxy, &title, "Not on Garmin yet.", upload);
                 }
                 Status::Failed(e) => {
                     let title = format!("Couldn't upload {}", r.title);
@@ -405,7 +485,10 @@ impl App {
 
     /// Shows the state in the menu's first line, the tooltip and the icon.
     fn refresh(&self) {
-        let text = if self.busy {
+        let updating = matches!(self.running, Some(Job::Update(_)));
+        let text = if updating {
+            "Updating…".to_owned()
+        } else if self.running.is_some() {
             "Syncing…".to_owned()
         } else if !self.cfg.setup_done {
             "Setup needed".to_owned()
@@ -422,7 +505,8 @@ impl App {
             "Not synced yet".to_owned()
         };
         self.status.set_text(&text);
-        self.sync_now.set_enabled(!self.busy);
+        self.sync_now.set_enabled(self.running.is_none());
+        self.update_now.set_enabled(!updating);
         let alert = !self.cfg.setup_done
             || self.error.is_some()
             || self

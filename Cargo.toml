@@ -20,6 +20,9 @@ ureq = { version = "3.4.2", features = ["json"] }
 notify = "8.2.0"
 tray-icon = { version = "0.26.1", default-features = false, features = ["ksni"] }
 winit = { version = "0.30.13", default-features = false, features = ["x11", "wayland", "wayland-dlopen"] }
+# Its updates. ring is already there for TLS.
+minisign-verify = "0.3.0"
+ring = "0.17.14"
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"] }

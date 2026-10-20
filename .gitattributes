@@ -1,0 +1,2 @@
+# Signed byte for byte: no line ending conversion on Windows checkouts.
+/tests/update/** -text

@@ -1,12 +1,21 @@
-//! Notifications. On Windows a click opens the window and a waiting ride's
-//! notification has an Upload button; elsewhere they only inform.
+//! Notifications. On Windows a click opens the window, and a waiting ride's
+//! or a new version's notification has a button; elsewhere they only inform.
 
 use super::Msg;
 use winit::event_loop::EventLoopProxy;
 
-/// `upload`: the start of a ride waiting for the user's go-ahead.
+/// A notification's button, on Windows.
+#[derive(Clone, Copy)]
+#[cfg_attr(not(windows), allow(dead_code))]
+pub enum Button {
+    /// Uploads the ride that starts then, waiting for the user's go-ahead.
+    Upload(i64),
+    /// Installs the new version, as the menu's item does.
+    Update,
+}
+
 #[cfg(windows)]
-pub fn show(proxy: &EventLoopProxy<Msg>, title: &str, body: &str, upload: Option<i64>) {
+pub fn show(proxy: &EventLoopProxy<Msg>, title: &str, body: &str, button: Option<Button>) {
     use tauri_winrt_notification::Toast;
     // Windows shows a notification only for a registered app id, and names it
     // after it. Store apps and installers register theirs; this exe registers
@@ -20,9 +29,10 @@ pub fn show(proxy: &EventLoopProxy<Msg>, title: &str, body: &str, upload: Option
     }
 
     let proxy = proxy.clone();
-    let mut toast = Toast::new(APP_ID).title(title).on_activated(move |button| {
-        let _ = proxy.send_event(match (button, upload) {
-            (Some(_), Some(start)) => Msg::Upload(start),
+    let mut toast = Toast::new(APP_ID).title(title).on_activated(move |action| {
+        let _ = proxy.send_event(match (action, button) {
+            (Some(_), Some(Button::Upload(start))) => Msg::Upload(start),
+            (Some(_), Some(Button::Update)) => Msg::Menu("update".into()),
             _ => Msg::Open,
         });
         Ok(())
@@ -30,8 +40,10 @@ pub fn show(proxy: &EventLoopProxy<Msg>, title: &str, body: &str, upload: Option
     if !body.is_empty() {
         toast = toast.text1(body);
     }
-    if upload.is_some() {
-        toast = toast.add_button("Upload", "upload");
+    match button {
+        Some(Button::Upload(_)) => toast = toast.add_button("Upload", "upload"),
+        Some(Button::Update) => toast = toast.add_button("Update", "update"),
+        None => {}
     }
     if let Err(e) = toast.show() {
         eprintln!("can't notify: {e}");
@@ -40,7 +52,7 @@ pub fn show(proxy: &EventLoopProxy<Msg>, title: &str, body: &str, upload: Option
 
 /// Through the freedesktop notification service on D-Bus.
 #[cfg(all(unix, not(target_os = "macos")))]
-pub fn show(_: &EventLoopProxy<Msg>, title: &str, body: &str, _: Option<i64>) {
+pub fn show(_: &EventLoopProxy<Msg>, title: &str, body: &str, _: Option<Button>) {
     let notify = || -> zbus::Result<()> {
         let hints = std::collections::HashMap::<&str, zbus::zvariant::Value>::new();
         let actions = Vec::<&str>::new();
@@ -61,7 +73,7 @@ pub fn show(_: &EventLoopProxy<Msg>, title: &str, body: &str, _: Option<i64>) {
 
 /// Through AppleScript, so they appear under Script Editor's name.
 #[cfg(target_os = "macos")]
-pub fn show(_: &EventLoopProxy<Msg>, title: &str, body: &str, _: Option<i64>) {
+pub fn show(_: &EventLoopProxy<Msg>, title: &str, body: &str, _: Option<Button>) {
     let quote = |s: &str| format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""));
     let script = format!(
         "display notification {} with title \"Domestique\" subtitle {}",

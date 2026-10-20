@@ -41,6 +41,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The app offers a newer release as an update: one whose binaries say
+      # they are older would offer itself forever.
+      - if: github.ref_type == 'tag'
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)".*/\1/p' Cargo.toml | head -n 1)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::The tag $GITHUB_REF_NAME isn't v$version, the version in Cargo.toml"
+            exit 1
+          fi
       - run: rustup toolchain install stable --profile minimal --target "$TARGET" && rustup default stable
       - run: cargo build --locked --profile dist --target "$TARGET"
         env:
@@ -109,6 +118,7 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag
+      # A draft, for scripts/sign-release.sh to sign and publish.
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --generate-notes --verify-tag --draft
         env:
           GH_TOKEN: ${{ github.token }}
