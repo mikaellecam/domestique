@@ -193,6 +193,8 @@ fn settings_page() {
         "the account is the only source of rides"
     );
     assert!(disabled(&h, "Sync after each ride"));
+    h.get_by_label("Check for updates");
+    h.get_by_label("This is Domestique 0.0.0.");
     h.snapshot("settings");
 }
 

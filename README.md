@@ -126,14 +126,43 @@ Every change in the **Settings** tab is saved at once:
 - **Sync after each ride**: only when MyWhoosh is installed on this computer.
 - **Check every 30 minutes**.
 - **Look back**: how many days a sync covers, 7 by default.
+- **Check for updates**: on by default, see [Updates](#updates). The version you run is shown
+  below it.
 
-The tray starts following **Sync after each ride** and **Check every 30 minutes** when you close
-the window.
+The tray starts following **Sync after each ride**, **Check every 30 minutes** and **Check for
+updates** when you close the window.
+
+## Updates
+
+With **Check for updates** on, the tray asks GitHub for Domestique's latest release a minute after
+it starts, then once a day: one request to `api.github.com`, which tells GitHub your IP address and
+the version you run. When there is a newer version, a notification says so, with an **Update**
+button on Windows, and the tray menu gets **Update to X.Y.Z**.
+
+Updating downloads the archive for your system, replaces the app and the `domestique-cli` next to
+it, and restarts Domestique. Nothing is replaced unless the release's `SHA256SUMS` is signed with
+Domestique's key, the one in [`minisign.pub`](minisign.pub) built into the app, the signature names
+that very release, and the archive matches its SHA-256 there. The replaced files are kept as
+`.old` until Domestique next starts. If you can't write to the folder Domestique is in, as with
+`Program Files`, it says so: download the new version from the
+[Releases page](https://github.com/mikaellecam/domestique/releases) instead.
+
+Updates are offered on Windows x86_64, Linux x86_64 and macOS on Apple silicon. With **Check for
+updates** off, Domestique never contacts GitHub.
+
+To check a download yourself, get `SHA256SUMS` and `SHA256SUMS.minisig` from the same release,
+next to the archive, and run, with [minisign](https://jedisct1.github.io/minisign/) and this
+repository's `minisign.pub`:
+
+```sh
+minisign -Vm SHA256SUMS -p minisign.pub    # prints the trusted comment: domestique vX.Y.Z
+sha256sum -c --ignore-missing SHA256SUMS   # checks the archive
+```
 
 ## Your data
 
-Domestique has no server of its own: it talks to MyWhoosh and Garmin directly. It keeps its files
-in:
+Domestique has no server of its own: it talks to MyWhoosh and Garmin directly, and to GitHub for
+updates. It keeps its files in:
 
 - Windows: `%APPDATA%\domestique\`
 - macOS: `~/Library/Application Support/domestique/`

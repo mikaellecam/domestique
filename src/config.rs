@@ -24,6 +24,8 @@ pub struct Config {
     /// How far back a sync looks.
     pub days: i64,
     pub setup_done: bool,
+    /// Look for a new version on GitHub once a day.
+    pub check_updates: bool,
 }
 
 impl Default for Config {
@@ -39,6 +41,7 @@ impl Default for Config {
             periodic_check: false,
             days: 7,
             setup_done: false,
+            check_updates: true,
         }
     }
 }
