@@ -31,6 +31,10 @@ windows-registry = "0.6"
 [dev-dependencies]
 egui_kittest = { version = "0.37", features = ["wgpu", "snapshot"] }
 
+[build-dependencies]
+# The .exe icon.
+winresource = { version = "0.1.34", default-features = false }
+
 [profile.release]
 strip = true
 

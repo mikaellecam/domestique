@@ -28,7 +28,11 @@ pub fn run() -> Result<()> {
             .with_title("Domestique")
             .with_app_id("domestique")
             .with_inner_size([560.0, 640.0])
-            .with_min_inner_size([400.0, 360.0]),
+            .with_min_inner_size([400.0, 360.0])
+            .with_icon(
+                eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/icon-256.png"))
+                    .expect("a valid PNG"),
+            ),
         ..Default::default()
     };
     eframe::run_native("domestique", options, Box::new(|_| Ok(Box::new(app))))
