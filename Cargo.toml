@@ -28,3 +28,8 @@ windows-registry = "0.6"
 
 [dev-dependencies]
 egui_kittest = { version = "0.37", features = ["wgpu", "snapshot"] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
