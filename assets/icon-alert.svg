@@ -1,15 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <!-- The tray icon when something needs the user: icon.svg with an orange badge. -->
+  <clipPath id="disc"><circle cx="16" cy="16" r="16"/></clipPath>
   <mask id="badge">
     <rect width="32" height="32" fill="#fff"/>
     <circle cx="26.5" cy="5.5" r="7"/>
   </mask>
   <g mask="url(#badge)">
     <circle cx="16" cy="16" r="16" fill="#1a8cd8"/>
-    <g transform="translate(10 4)">
-      <path fill="#fff" d="M4.5 0H7.5Q8 0 8 .5V3H9Q10 3 10 4V6Q10 7 11 7.5Q12 8 12 10V13Q11 16 12 19V22Q12 24 10 24H2Q0 24 0 22V19Q1 16 0 13V10Q0 8 1 7.5Q2 7 2 6V4Q2 3 3 3H4V.5Q4 0 4.5 0Z"/>
-      <rect y="10" width="12" height="2" fill="#1a8cd8"/>
+    <g fill="#fff">
+      <path d="M12 21.5L16 25" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <rect x="4" y="24" width="6" height="2" rx="1"/>
+      <rect x="13" y="24" width="6" height="2" rx="1"/>
+      <path d="M9.33 16.24L6.65 24.51A0.9 0.9 0 0 1 8.15 25.49L14.67 19.76Z"/>
+      <circle cx="12" cy="18" r="4"/>
+      <circle cx="21" cy="19" r="3"/>
+      <rect x="14" y="4" width="6" height="2" rx="1"/>
     </g>
+    <path clip-path="url(#disc)" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          d="M12 18L21 19L16 6M12 18L18.5 12.5M17.15 9L32.39 9M21 19L31.76 7.54"/>
+    <circle cx="12" cy="18" r="1" fill="#1a8cd8"/>
+    <circle cx="21" cy="19" r="1" fill="#1a8cd8"/>
   </g>
   <circle cx="26.5" cy="5.5" r="5.5" fill="#f28c28"/>
 </svg>
