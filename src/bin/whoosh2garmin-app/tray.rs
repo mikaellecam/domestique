@@ -3,7 +3,7 @@
 //!
 //! It blocks in the OS event loop and wakes only for a click, a change in
 //! MyWhoosh's ride folder, a second launch, a finished sync, or a deadline:
-//! the ride file going quiet, or the periodic check.
+//! the startup sync, the ride file going quiet, a retry, or the periodic check.
 
 mod toast;
 
@@ -24,6 +24,13 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::WindowId;
 
+/// After login the network may not be up yet.
+const STARTUP_DELAY: Duration = Duration::from_secs(60);
+/// MyWhoosh may write the ride file during the ride or only at its end, so
+/// the sync waits until the file has been left alone this long.
+const QUIET: Duration = Duration::from_secs(2 * 60);
+/// A failed sync is tried once more after this.
+const RETRY: Duration = Duration::from_secs(15 * 60);
 const PERIOD: Duration = Duration::from_secs(30 * 60);
 
 pub enum Msg {
@@ -32,16 +39,18 @@ pub enum Msg {
     Open,
     WindowClosed,
     RideFileChanged,
-    /// A sync or upload finished: the rides' status before it, and after.
-    Done(Vec<Ride>, Result<Vec<Ride>>),
+    /// A job finished: the rides' status before it, and after.
+    Done(Job, Vec<Ride>, Result<Vec<Ride>>),
     /// The Upload button of a waiting ride's notification, on Windows.
     #[cfg_attr(not(windows), allow(dead_code))]
     Upload(i64),
 }
 
 #[derive(PartialEq)]
-enum Job {
+pub enum Job {
     Sync,
+    /// The one retry of a failed sync.
+    Retry,
     Upload(i64),
 }
 
@@ -91,11 +100,12 @@ pub fn run() -> Result<()> {
         watcher: None,
         busy: false,
         queue: Vec::new(),
-        quiet: env::var("WHOOSH2GARMIN_QUIET_SECS")
+        test_delay: env::var("WHOOSH2GARMIN_DELAY_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
-            .map_or(Duration::from_secs(120), Duration::from_secs),
-        ride_due: None,
+            .map(Duration::from_secs),
+        sync_due: None,
+        retry_due: None,
         check_due: None,
         rides: sync::load_status(),
         last_sync: None,
@@ -152,11 +162,11 @@ struct App {
     /// A sync or upload is running; others wait in `queue`.
     busy: bool,
     queue: Vec<Job>,
-    /// MyWhoosh may write the ride file during the ride or only at its end,
-    /// so the sync waits until the file has been left alone this long.
-    /// WHOOSH2GARMIN_QUIET_SECS shortens it for tests.
-    quiet: Duration,
-    ride_due: Option<Instant>,
+    /// WHOOSH2GARMIN_DELAY_SECS, for tests: replaces STARTUP_DELAY, QUIET and RETRY.
+    test_delay: Option<Duration>,
+    /// For the startup sync, then the ride file going quiet.
+    sync_due: Option<Instant>,
+    retry_due: Option<Instant>,
     check_due: Option<Instant>,
     /// As of the last sync, by this process or the window.
     rides: Vec<Ride>,
@@ -179,7 +189,7 @@ impl ApplicationHandler<Msg> for App {
         }
         self.apply_settings();
         if self.cfg.setup_done {
-            self.request(Job::Sync);
+            self.sync_due = Some(Instant::now() + self.delay(STARTUP_DELAY));
         } else {
             self.open_window();
         }
@@ -213,12 +223,12 @@ impl ApplicationHandler<Msg> for App {
             }
             Msg::RideFileChanged => {
                 // May come often during a ride: only move the deadline.
-                self.ride_due = Some(Instant::now() + self.quiet);
+                self.sync_due = Some(Instant::now() + self.delay(QUIET));
                 return;
             }
-            Msg::Done(before, result) => {
+            Msg::Done(job, before, result) => {
                 self.busy = false;
-                self.done(&before, result);
+                self.done(job, &before, result);
                 if !self.queue.is_empty() {
                     let job = self.queue.remove(0);
                     self.request(job);
@@ -231,10 +241,15 @@ impl ApplicationHandler<Msg> for App {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let now = Instant::now();
-        if self.ride_due.is_some_and(|t| t <= now) {
-            self.ride_due = None;
-            self.error = None; // the user waits for this ride: report a failure even if it repeats
+        if self.sync_due.is_some_and(|t| t <= now) {
+            self.sync_due = None;
+            self.error = None; // after a ride the user waits: report a failure even if it repeats
             self.request(Job::Sync);
+            self.refresh();
+        }
+        if self.retry_due.is_some_and(|t| t <= now) {
+            self.retry_due = None;
+            self.request(Job::Retry);
             self.refresh();
         }
         if self.check_due.is_some_and(|t| t <= now) {
@@ -242,18 +257,21 @@ impl ApplicationHandler<Msg> for App {
             self.request(Job::Sync);
             self.refresh();
         }
-        event_loop.set_control_flow(
-            match self.ride_due.into_iter().chain(self.check_due).min() {
-                Some(t) => ControlFlow::WaitUntil(t),
-                None => ControlFlow::Wait,
-            },
-        );
+        let next = [self.sync_due, self.retry_due, self.check_due];
+        event_loop.set_control_flow(match next.into_iter().flatten().min() {
+            Some(t) => ControlFlow::WaitUntil(t),
+            None => ControlFlow::Wait,
+        });
     }
 
     fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, _: WindowEvent) {}
 }
 
 impl App {
+    fn delay(&self, normal: Duration) -> Duration {
+        self.test_delay.unwrap_or(normal)
+    }
+
     fn build_tray(&self) -> Result<TrayIcon> {
         let menu = Menu::with_items(&[
             &self.status,
@@ -306,14 +324,22 @@ impl App {
         thread::spawn(move || {
             let before = sync::load_status();
             let result = match job {
-                Job::Sync => config::load().and_then(|mut cfg| sync::run(&mut cfg)),
+                Job::Sync | Job::Retry => config::load().and_then(|mut cfg| sync::run(&mut cfg)),
                 Job::Upload(start) => upload(start),
             };
-            let _ = proxy.send_event(Msg::Done(before, result));
+            let _ = proxy.send_event(Msg::Done(job, before, result));
         });
     }
 
-    fn done(&mut self, before: &[Ride], result: Result<Vec<Ride>>) {
+    fn done(&mut self, job: Job, before: &[Ride], result: Result<Vec<Ride>>) {
+        // One retry per sync, then the next trigger.
+        if job == Job::Sync {
+            let failed = match &result {
+                Ok(rides) => rides.iter().any(|r| matches!(r.status, Status::Failed(_))),
+                Err(_) => true,
+            };
+            self.retry_due = failed.then(|| Instant::now() + self.delay(RETRY));
+        }
         let rides = match result {
             Ok(rides) => rides,
             Err(e) => {
@@ -349,7 +375,7 @@ impl App {
                 Status::OnGarmin => {}
             }
         }
-        let time = chrono::Local::now().format("%H:%M").to_string();
+        let time = jiff::Zoned::now().strftime("%H:%M").to_string();
         self.last_sync = Some((time, uploaded));
         self.rides = rides;
         self.error = None;
@@ -431,21 +457,13 @@ fn watch(dir: &Path, proxy: EventLoopProxy<Msg>) -> notify::Result<notify::Recom
     Ok(watcher)
 }
 
-/// Uploads a ride the last sync listed, and records the result for the window.
+/// Uploads a ride the last sync listed. Returns the rides' new status.
 fn upload(start: i64) -> Result<Vec<Ride>> {
-    let mut cfg = config::load()?;
-    let mut rides = sync::load_status();
-    let ride = rides
-        .iter_mut()
+    let ride = (sync::load_status().into_iter())
         .find(|r| r.start == start)
         .ok_or("the ride is no longer in the list")?;
-    ride.status = match sync::upload(&mut cfg, ride) {
-        Ok(true) => Status::Uploaded,
-        Ok(false) => Status::OnGarmin,
-        Err(e) => Status::Failed(e.to_string()),
-    };
-    sync::save_status(&rides)?;
-    Ok(rides)
+    sync::upload_and_record(&mut config::load()?, &ride)?;
+    Ok(sync::load_status())
 }
 
 /// The rides that are new or whose status differs from `before`.

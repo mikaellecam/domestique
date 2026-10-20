@@ -79,9 +79,37 @@ pub fn check(cfg: &mut Config) -> Result<Vec<Ride>> {
     Ok(rides)
 }
 
+/// Uploads one ride and records its new status in status.json, for the
+/// other process to show. A failed upload is a status, not an error.
+pub fn upload_and_record(cfg: &mut Config, ride: &Ride) -> Result<Status> {
+    let status = upload(cfg, ride);
+    let mut rides = load_status();
+    match rides.iter_mut().find(|r| r.start == ride.start) {
+        Some(r) => r.status = status.clone(),
+        // Listed by `check`, which saves nothing.
+        None => {
+            rides.push(Ride {
+                status: status.clone(),
+                ..ride.clone()
+            });
+            rides.sort_by_key(|r| r.start);
+        }
+    }
+    save_status(&rides)?;
+    Ok(status)
+}
+
+fn upload(cfg: &mut Config, ride: &Ride) -> Status {
+    match upload_file(cfg, ride) {
+        Ok(true) => Status::Uploaded,
+        Ok(false) => Status::OnGarmin, // Garmin already had it
+        Err(e) => Status::Failed(e.to_string()),
+    }
+}
+
 /// Reads or downloads the ride, rewrites it for `cfg.device` and uploads it.
 /// Returns false when Garmin already had it.
-pub fn upload(cfg: &mut Config, ride: &Ride) -> Result<bool> {
+fn upload_file(cfg: &mut Config, ride: &Ride) -> Result<bool> {
     let device = cfg.device.ok_or("no Garmin device chosen")?;
     let raw = match &ride.source {
         Source::Local(path) => {
@@ -109,11 +137,7 @@ pub fn run(cfg: &mut Config) -> Result<Vec<Ride>> {
     let before = load_status();
     for r in &mut rides {
         if r.status == Status::Waiting && cfg.auto_upload {
-            r.status = match upload(cfg, r) {
-                Ok(true) => Status::Uploaded,
-                Ok(false) => Status::OnGarmin,
-                Err(e) => Status::Failed(e.to_string()),
-            };
+            r.status = upload(cfg, r);
         }
         // Keep showing which rides this app uploaded.
         if r.status == Status::OnGarmin
@@ -221,5 +245,42 @@ mod tests {
         assert!(is_synced(&[(start, start + 2911)], start));
         assert!(is_synced(&[(start + 60, start + 2900)], start)); // watch started a minute late
         assert!(!is_synced(&[(start + 3600, start + 7200)], start));
+    }
+
+    #[test]
+    fn upload_records_the_status() {
+        let dir = env::temp_dir().join("whoosh2garmin-sync-tests");
+        let _ = fs::remove_dir_all(&dir);
+        // SAFETY: no other test of this crate reads the environment.
+        unsafe {
+            env::set_var("XDG_CONFIG_HOME", &dir);
+            env::set_var("APPDATA", &dir);
+            env::set_var("HOME", &dir);
+        }
+        let ride = |start, status| Ride {
+            start,
+            title: String::new(),
+            source: Source::Cloud {
+                file_id: String::new(),
+            },
+            status,
+        };
+        save_status(&[ride(1, Status::OnGarmin), ride(3, Status::Waiting)]).unwrap();
+        // With no device chosen, it fails before going online.
+        let mut cfg = Config::default();
+        let failed = Status::Failed("no Garmin device chosen".into());
+        assert_eq!(
+            upload_and_record(&mut cfg, &ride(2, Status::Waiting)).unwrap(),
+            failed
+        );
+        upload_and_record(&mut cfg, &ride(3, Status::Waiting)).unwrap();
+        let saved: Vec<_> = load_status()
+            .into_iter()
+            .map(|r| (r.start, r.status))
+            .collect();
+        assert_eq!(
+            saved,
+            [(1, Status::OnGarmin), (2, failed.clone()), (3, failed)]
+        );
     }
 }
