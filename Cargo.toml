@@ -30,5 +30,10 @@ egui_kittest = { version = "0.37", features = ["wgpu", "snapshot"] }
 
 [profile.release]
 strip = true
+
+# The binaries handed to users: smaller and faster, but slow to build.
+# cargo build --profile dist
+[profile.dist]
+inherits = "release"
 lto = true
 codegen-units = 1
