@@ -23,6 +23,7 @@ fn env() {
         unsafe {
             std::env::set_var("XDG_CONFIG_HOME", &dir);
             std::env::set_var("APPDATA", &dir);
+            std::env::set_var("HOME", &dir); // macOS
             std::env::set_var("TZ", "UTC");
         }
     });
