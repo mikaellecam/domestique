@@ -242,7 +242,12 @@ impl App {
     fn uploads_done(&mut self) {
         if self.page == Page::Setup {
             // The review stands for the last sync, so the tray doesn't
-            // announce the rides it showed as new.
+            // announce the rides it showed as new, nor upload the unticked ones.
+            for (r, &ticked) in self.rides.iter_mut().zip(&self.ticked) {
+                if r.status == Status::Waiting && !ticked {
+                    r.status = Status::Skipped;
+                }
+            }
             let r = sync::save_status(&self.rides);
             self.report(r);
             self.finish_setup();
@@ -455,6 +460,7 @@ fn status_label(ui: &mut egui::Ui, status: &Status) -> egui::Response {
         Status::OnGarmin => ui.weak("Already on Garmin"),
         Status::Uploaded => ui.label("Uploaded"),
         Status::Waiting => ui.label("Not on Garmin"),
+        Status::Skipped => ui.weak("Skipped"),
         Status::Failed(_) => ui.colored_label(ui.visuals().error_fg_color, "Failed"),
     }
 }

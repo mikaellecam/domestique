@@ -372,7 +372,7 @@ impl App {
                     let title = format!("Couldn't upload {}", r.title);
                     toast::show(&self.proxy, &title, e, None);
                 }
-                Status::OnGarmin => {}
+                Status::OnGarmin | Status::Skipped => {}
             }
         }
         let time = jiff::Zoned::now().strftime("%H:%M").to_string();

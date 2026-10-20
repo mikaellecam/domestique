@@ -148,6 +148,7 @@ fn rides_page_shows_each_status() {
     let reason = "Garmin upload: http status: 500";
     env();
     sync::save_status(&[
+        ride(4, "Col du Galibier", Status::Skipped),
         ride(3, "Tempus Fugit", Status::OnGarmin),
         ride(2, "Downtown Dolomites", Status::Uploaded),
         ride(1, "Alula Loop", Status::Failed(reason.to_owned())),
@@ -164,9 +165,14 @@ fn rides_page_shows_each_status() {
     let mut h = harness(App::new(configured(), true));
     h.run();
     h.get_by_label("Last check Fri 16 Oct, 19:45");
-    for label in ["Upload", "Retry", reason, "Uploaded", "Already on Garmin"] {
+    for label in ["Skipped", "Retry", reason, "Uploaded", "Already on Garmin"] {
         h.get_by_label(label);
     }
+    assert_eq!(
+        h.get_all_by_label("Upload").count(),
+        2,
+        "waiting and skipped"
+    );
     h.snapshot("rides_dark");
     h.ctx.set_theme(egui::Theme::Light);
     h.run();

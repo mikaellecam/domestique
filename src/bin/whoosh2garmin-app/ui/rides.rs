@@ -65,13 +65,16 @@ impl App {
                 Status::Waiting if uploading == Some(i) => {
                     ui.label("Uploading…");
                 }
-                Status::Waiting | Status::Failed(_) => {
+                Status::Waiting | Status::Skipped | Status::Failed(_) => {
                     let label = match ride.status {
-                        Status::Waiting => "Upload",
-                        _ => "Retry",
+                        Status::Failed(_) => "Retry",
+                        _ => "Upload",
                     };
                     if ui.add_enabled(!busy, egui::Button::new(label)).clicked() {
                         upload = Some(i);
+                    }
+                    if ride.status == Status::Skipped {
+                        status_label(ui, &ride.status);
                     }
                 }
                 _ => {

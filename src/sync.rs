@@ -16,6 +16,8 @@ pub enum Status {
     Uploaded,
     /// Missing from Garmin: uploads are set to ask first, or not done yet.
     Waiting,
+    /// Missing from Garmin, and the user chose not to upload it.
+    Skipped,
     Failed(String),
 }
 
@@ -130,26 +132,38 @@ fn upload_file(cfg: &mut Config, ride: &Ride) -> Result<bool> {
     garmin::upload(&garmin_token(cfg)?, &format!("{}.fit", ride.start), &data)
 }
 
-/// One sync: check, then upload what Garmin is missing when uploads are
-/// automatic. Saves the result for the other process to show.
+/// One sync: check, then upload what Garmin is missing and the user didn't skip,
+/// when uploads are automatic. Saves the result for the other process to show.
 pub fn run(cfg: &mut Config) -> Result<Vec<Ride>> {
     let mut rides = check(cfg)?;
-    let before = load_status();
-    for r in &mut rides {
-        if r.status == Status::Waiting && cfg.auto_upload {
-            r.status = upload(cfg, r);
+    let auto = cfg.auto_upload;
+    settle(&mut rides, &load_status(), |r| {
+        if auto {
+            upload(cfg, r)
+        } else {
+            Status::Waiting
         }
-        // Keep showing which rides this app uploaded.
-        if r.status == Status::OnGarmin
-            && before
-                .iter()
-                .any(|b| b.start == r.start && b.status == Status::Uploaded)
-        {
-            r.status = Status::Uploaded;
-        }
-    }
+    });
     save_status(&rides)?;
     Ok(rides)
+}
+
+/// Settles what `check` found against the last sync: a ride this app
+/// uploaded stays Uploaded, one the user skipped stays Skipped until it
+/// shows up on Garmin, and the others missing from Garmin go to `upload`.
+fn settle(rides: &mut [Ride], before: &[Ride], mut upload: impl FnMut(&Ride) -> Status) {
+    for r in rides {
+        let was = before
+            .iter()
+            .find(|b| b.start == r.start)
+            .map(|b| &b.status);
+        r.status = match (&r.status, was) {
+            (Status::OnGarmin, Some(Status::Uploaded)) => Status::Uploaded,
+            (Status::Waiting, Some(Status::Skipped)) => Status::Skipped,
+            (Status::Waiting, _) => upload(r),
+            (status, _) => status.clone(),
+        };
+    }
 }
 
 /// The rides of the last sync, by whichever process ran it.
@@ -247,6 +261,39 @@ mod tests {
         assert!(!is_synced(&[(start + 3600, start + 7200)], start));
     }
 
+    fn ride(start: i64, status: Status) -> Ride {
+        let source = Source::Cloud {
+            file_id: String::new(),
+        };
+        Ride {
+            start,
+            title: String::new(),
+            source,
+            status,
+        }
+    }
+
+    #[test]
+    fn skipped_is_kept_and_not_uploaded() {
+        use Status::*;
+        let before = [ride(1, Skipped), ride(2, Skipped), ride(3, Uploaded)];
+        // As `check` finds them: 2 has since shown up on Garmin, 4 is new.
+        let mut rides = [
+            ride(1, Waiting),
+            ride(2, OnGarmin),
+            ride(3, OnGarmin),
+            ride(4, Waiting),
+        ];
+        let mut uploads = Vec::new();
+        settle(&mut rides, &before, |r| {
+            uploads.push(r.start);
+            Uploaded
+        });
+        assert_eq!(uploads, [4]);
+        let statuses: Vec<_> = rides.into_iter().map(|r| r.status).collect();
+        assert_eq!(statuses, [Skipped, OnGarmin, Uploaded, Uploaded]);
+    }
+
     #[test]
     fn upload_records_the_status() {
         let dir = env::temp_dir().join("whoosh2garmin-sync-tests");
@@ -257,14 +304,6 @@ mod tests {
             env::set_var("APPDATA", &dir);
             env::set_var("HOME", &dir);
         }
-        let ride = |start, status| Ride {
-            start,
-            title: String::new(),
-            source: Source::Cloud {
-                file_id: String::new(),
-            },
-            status,
-        };
         save_status(&[ride(1, Status::OnGarmin), ride(3, Status::Waiting)]).unwrap();
         // With no device chosen, it fails before going online.
         let mut cfg = Config::default();

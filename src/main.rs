@@ -60,6 +60,7 @@ fn run() -> Result<()> {
                     Status::OnGarmin => "on Garmin".to_owned(),
                     Status::Uploaded => "uploaded".to_owned(),
                     Status::Waiting => "to upload".to_owned(),
+                    Status::Skipped => "skipped".to_owned(),
                     Status::Failed(e) => format!("failed: {e}"),
                 };
                 println!("{}  {}  {status}", utc_string(r.start), r.title);
