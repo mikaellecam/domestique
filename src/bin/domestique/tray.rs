@@ -499,24 +499,15 @@ fn summary(uploaded: usize, rides: &[Ride]) -> String {
     }
 }
 
-/// A dot: blue, or orange when something needs the user.
+/// The app's icon, with an orange badge when something needs the user.
 fn icon(alert: bool) -> Icon {
-    const SIZE: u32 = 32;
-    let [r, g, b] = if alert {
-        [0xf2, 0x8c, 0x28]
+    let png: &[u8] = if alert {
+        include_bytes!("../../../assets/icon-alert-32.png")
     } else {
-        [0x1a, 0x8c, 0xd8]
+        include_bytes!("../../../assets/icon-32.png")
     };
-    let rgba = (0..SIZE * SIZE)
-        .flat_map(|i| {
-            let c = SIZE as f32 / 2.0;
-            let (x, y) = ((i % SIZE) as f32 + 0.5 - c, (i / SIZE) as f32 + 0.5 - c);
-            // Coverage of the pixel, for a smooth edge.
-            let a = (c - 1.0 - x.hypot(y)).clamp(0.0, 1.0);
-            [r, g, b, (a * 255.0) as u8]
-        })
-        .collect();
-    Icon::from_rgba(rgba, SIZE, SIZE).expect("a valid icon size")
+    let icon = eframe::icon_data::from_png_bytes(png).expect("a valid PNG");
+    Icon::from_rgba(icon.rgba, icon.width, icon.height).expect("a valid icon size")
 }
 
 #[cfg(test)]
@@ -547,6 +538,12 @@ mod tests {
         let starts: Vec<i64> = changed(&before, &after).map(|r| r.start).collect();
         assert_eq!(starts, [2, 3]);
         assert_eq!(changed(&after, &after).count(), 0);
+    }
+
+    #[test]
+    fn icons() {
+        icon(false);
+        icon(true);
     }
 
     #[test]
