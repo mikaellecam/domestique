@@ -375,7 +375,7 @@ impl App {
                 Status::OnGarmin => {}
             }
         }
-        let time = chrono::Local::now().format("%H:%M").to_string();
+        let time = jiff::Zoned::now().strftime("%H:%M").to_string();
         self.last_sync = Some((time, uploaded));
         self.rides = rides;
         self.error = None;
