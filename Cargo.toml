@@ -1,6 +1,6 @@
 [package]
 name = "domestique"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Syncs MyWhoosh rides to Garmin Connect as if a Garmin device had recorded them"
 license = "MIT"
